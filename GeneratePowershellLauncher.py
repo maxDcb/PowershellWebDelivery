@@ -45,7 +45,7 @@ def main(argv):
     if os.name == 'nt':
             args = ('.\\ressources\\donut.exe', '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', '.\\shellcode.b64', binary)
     else:   
-            args = ('./ressources/donut', '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', './shellcode.b64', binary)
+            args = ('./ressources/donut', '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', './shellcode.b64', '-i', binary)
     popen = subprocess.Popen(args, stdout=subprocess.PIPE)
     popen.wait()
     output = popen.stdout.read()
