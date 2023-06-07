@@ -10,7 +10,7 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 
 def main(argv):
-    if(len(argv)<3):
+    if(len(argv)<8):
             print ('On Windows:\nGeneratePowershellLauncher.py -i 127.0.0.1 -p 8000 -b C:\\Windows\\System32\\calc.exe -a "some args"')
             print ('On linux:\nGeneratePowershellLauncher.py -i 127.0.0.1 -p 8000 -b ./calc.exe -a "some args"')
             exit()
