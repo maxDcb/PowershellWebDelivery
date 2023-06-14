@@ -4,6 +4,7 @@ pip3 install pycryptodome
 
 Generate a powershell dropper for any DLL or EXE. The shellcode of the payload is generated with [Donut](https://github.com/TheWover/donut). Two powershell script are generated, the first is an AMSI bypass (credit to rasta-mouse) the second is the injector (credit to [Metasploit](https://github.com/rapid7/metasploit-framework) web-delivery PSH). The output is store on ./web, the final command to launch on the victime host is display on the console.  
 
+See [AMSITrigger](https://github.com/RythmStick/AMSITrigger) and [Invoke-Obfuscation](https://github.com/danielbohannon/Invoke-Obfuscation) for AMSI bypass.
 
 Compatible with linux (GeneratePowershellLauncher.py) and windows (GeneratePowershellLauncher.ps1).  
 
